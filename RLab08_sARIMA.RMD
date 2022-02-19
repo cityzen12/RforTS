@@ -1,0 +1,180 @@
+---
+title: 'RLab08: ARMA/ARIMA建模2'
+subtitle: 季节模型和综合分析
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    toc: yes
+author: '朱子灏2019193014'
+---
+
+本文件需多周连续上机完成，请大家下课时将文件保存于自己的邮箱以待下次使用.
+
+应首先加载软件包`forecast`
+
+```{r}
+require(forecast)
+```
+
+
+# ARMA/ARIMA建模的一般流程 
+
+* 构造时间序列对象，绘制时序图和ACF/PACF图；
+* 判断序列平稳性，如果是趋势非平稳则做趋势差分消除趋势，如为季节非平稳则做季节差分，直至平稳；
+* 如果方差不稳定，应先做适当的BOX-COX变换再差分；
+* 对平稳化后的序列选择适当的ARMA模型（定阶）；
+* 对原序列建立相应的ARIMA模型，并估计参数；
+* 对残差进行白噪声检验，如果残差不是白噪声则应重新设定模型；
+* 对模型进行适当优化；
+* 如果有多个有效的模型，利用AIC/BIC/BACKTESTING进行模型比较；
+* 预测；
+
+
+# 案例九 美国航空乘客人数
+
+这是讲义中的例子，数据为R中自带的数据`AirPassengers`
+
+```{r}
+data("AirPassengers")
+x <- AirPassengers
+plot(x)
+```
+
+* 为什么要做对数变换？
+* `答：可以消除一些趋势`
+
+* 取对数变换，然后用趋势差分和季节差分分别消除趋势和季节性，观察所得序列的ACF；然后分别假设合适的AR模型和MA模型；
+```{r}
+x.log = log(x)
+x.1 = diff(x.log)
+x.12 = diff(x.log, lag = 12)
+x.1.12 = diff(x.1, lag = 12)
+tsdisplay(x.1)
+tsdisplay(x.12)
+tsdisplay(x.1.12)
+```
+
+* 估计并检验模型；用AIC和BIC进行模型比较；
+```{r}
+m1 = Arima(x, order = c(0, 1, 1), seasonal = c(0, 1, 1),lambda = 0)
+summary(m1)
+```
+
+* 预测并比较；
+* `答：模型挺好的`
+```{r}
+f1 = forecast(m1, 24)
+plot(f1)
+```
+
+# 案例十 中国社会消费品零售总额
+
+数据文件为`TRSCG.csv`，对2002年至2010年的中国社会消费品零售总额进行建模
+并预测2011年的取值；将预测序列和实际观察序列绘制在同一张图上进行比较，计算
+平均预测均方误差；
+
+```{r}
+TRSCG = read.csv("data/TRSCG.csv", header = T)
+n = length(TRSCG[,2])
+TRSCG = ts(TRSCG[,2][n:1],start=c(2002,1),frequency = 12)
+plot(TRSCG)
+tsdisplay(TRSCG)
+m2 = Arima(TRSCG, order = c(0, 1, 1), seasonal = c(0, 1, 1), lambda = 0)
+summary(m2)
+f2 = forecast(m2, 12)
+plot(f2)
+```
+
+
+
+# 案例十一 中国航空公司的国际旅客订座量预测
+
+读入数据`TravelSky.csv`，对变量`international`构建时间序列并对未来两年的
+订座量进行预测；
+```{r}
+CA = read.csv('data/TravelSky.csv', header = T)
+ca = ts(CA$international, start = c(2009, 12),end = c(2019, 7), frequency = 12)
+tsdisplay(ca)
+m3 = Arima(ca, order = c(1, 1, 1), seasonal =  c(1, 1, 1), lambda = 0)
+m3
+f3 = forecast(m3, 24)
+plot(f3)
+Box.test(resid(m3), lag = 13, type = "Ljung-Box", fitdf = 2)
+```
+
+# 案例十二 美国实际GNP增长率
+
+考虑美国从1947年第1季度到2011年第3季度的季度实际GNP，该数据存放于文件`q-GNPC96.txt`,数据以及做了季节调整.
+
+* 读取数据，构造GNP对数增长率的时间序列，绘制时间序列图；
+
+```{r}
+da = read.table("data/q-GNPC96.txt",header=TRUE)
+x = log(da$gnp) %>% diff() %>% ts(start=c(1947,1),frequency = 4)
+tsdisplay(x)
+```
+
+* 分别拟合MA(2)模型，MA(5)模型和AR(3)模型；如有必要可进一步优化模型.
+```{r}
+ma2=Arima(x,order=c(0,0,2))
+ma5=Arima(x,order=c(0,0,5),fixed=c(NA,NA,0,0,NA,NA))
+ar3=Arima(x,order=c(3,0,0))
+```
+* 检验模型的充分性；
+```{r}
+Box.test(resid(ar3), lag = 5, type = 'Ljung-Box', fitdf = 2)
+Box.test(resid(ma2), lag = 5, type = 'Ljung-Box', fitdf = 2)
+Box.test(resid(ma5), lag = 5, type = 'Ljung-Box', fitdf = 2)
+```
+
+* 分别用AIC，BIC准则比较上述模型；哪个好？
+* `答：AIC BIC都挺小的，都挺不错的`
+```{r}
+summary(ma2)
+summary(ma5)
+summary(ar3)
+```
+
+* 以2004年第4季度为预测原点，把数据分为估计样本和预测样本，应用回测检验，并以均方预测误差为准则，比较上述模型.
+* `答：均方误差都挺小的，都挺不错的`
+```{r}
+x1=window(x,end=c(2004,3))
+x2=window(x,start=c(2004,4))
+PE_ma2=c()
+PE_ma5=c()
+PE_ar3=c()
+h=length(x2)
+for (j in 1:h){
+  x.train=x[1:(230+j)]
+  ma2=Arima(x.train,order=c(0,0,2))
+  ma5=Arima(x.train,order=c(0,0,5),fixed=c(NA,NA,0,0,NA,NA))
+  ar3=Arima(x.train,order=c(3,0,0))
+  PE_ma2[j]=x2[j]-forecast(ma2,h=1)$mean
+  PE_ma5[j]=x2[j]-forecast(ma5,h=1)$mean
+  PE_ar3[j]=x2[j]-forecast(ar3,h=1)$mean
+}
+cbind(MSFE_MA2=mean(PE_ma2*2),MSFE_MA5=mean(PE_ma5*2),MSFE_AR3=mean(PE_ar3*2))
+```
+# 案例十三 可口可乐公司季度回报
+
+数据文件为`q-ko-earns8309.txt`，用1983年至2007年的数据进行建模，并预测
+2008年和2009年的季度回报，在同一张图上绘制点预测，区间预测和实际观测值.
+
+```{r}
+data12 = read.table("data/q-ko-earns8309.txt",header=T)
+ko = ts(data12$value, start=c(1983,1), frequency = 4)
+plot(ko)
+tsdisplay(ko)
+```
+```{r}
+train = ts(data12$value, start = c(1983, 1), end = c(2007, 4), frequency = 4)
+m5 = Arima(train, order = c(1, 1, 1), seasonal = c(1, 1, 1), lambda = 0)
+summary(m5)
+f5 = forecast(m5, 8)
+plot(f5)
+ts = ts(data12$value, start = c(1983, 1), frequency = 4)
+lines(ts, col = 'orange')
+```
+

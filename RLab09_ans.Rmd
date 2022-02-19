@@ -1,0 +1,285 @@
+---
+title: "单位根检验"
+author: "温松桥"
+output: 
+  html_notebook:
+    toc: true
+---
+
+
+```{r,message=FALSE,warning=FALSE}
+library(forecast)
+library(urca)
+```
+
+## 实验一 美国季度GNP数据
+
+数据文件为`q-GNPC96.txt`,该数据的第三列为GNP
+
+* 读取数据，并构造时间序列，记为`gnp`，并绘制时间序列图
+```{r}
+da=read.table("data/q-GNPC96.txt",header=TRUE)
+head(da)
+gnp=ts(da$gnp,start=c(1947,1),frequency = 4)
+plot.ts(gnp)
+```
+
+* 记gnp的对数序列为`x`，作为我们后面分析的对象
+```{r}
+x = log(gnp)
+plot(x)
+```
+
+* 对`x`建立ARIMA(1,1,0)模型，检验模型的充分性；
+
+```{r}
+diff(x) %>% tsdisplay()
+m1 = Arima(x,
+           order = c(1,1,0),include.drift = TRUE)
+resid(m1) %>% Acf()
+resid(m1) %>% Box.test(lag=10,fitdf = 1)
+```
+模型充分；
+
+* 对`x`建立线性趋势模型，绘制残差的时序图，对残差建立一个合适的AR模型，检验该AR模型的充分性；
+
+```{r}
+t = time(x)
+m2 = lm(x ~ t)
+resid(m2) %>% tsdisplay()
+m22 = Arima(resid(m2),order = c(2,0,0))
+resid(m22) %>% Acf()
+resid(m22) %>% Box.test(lag=10,fitdf = 2)
+```
+
+
+* 用单位根检验来检验`x`是否为趋势平稳模型？
+
+```{r}
+df1 = ur.df(x, type="trend", lags = 1)
+summary(df1)
+```
+tau3的取值为-1.843，临界值为-3.42，因此不能拒绝原假设，即本序列x为差分平稳序列；phi2统计量取值为
+17.48，因此拒绝原假设，即差分后不是中心化的AR(1)模型（含有一个漂移项）；
+
+下面的单位根检验可以确认这一点。
+
+```{r}
+df2 = ur.df(x,type="drift",lags = 1)
+summary(df2)
+```
+tau2统计量为-1.887，5%临界值为-2.87，不能拒绝原假设；
+
+综上，本题中的x变量服从一个ARIMA(1,1,0)模型，即
+```{r}
+summary(m1)
+```
+
+
+
+
+## 实验二 标准普尔500指数
+
+```{r}
+da = read.table("../data/d-sp55008.txt",header=T)
+sp5 = log(da[,7])
+plot.ts(sp5)
+diff(sp5) %>% tsdisplay()
+```
+选取lags=2来进行单位根检验
+
+```{r}
+df2_1 = ur.df(sp5,type="trend",lags=2)
+summary(df2_1)
+```
+tau3统计量取值为-2.018，临界值为-3.41，不能拒绝原假设，因此sp5没有线性趋势；
+phi2统计量为6.4，临界值为4.68，因此拒绝原假设，即含有漂移项；下面的检验确认这一点
+
+```{r}
+df2_2 = ur.df(sp5, type="drift", lags = 2)
+summary(df2_2)
+```
+tau2 统计量取值为-0.839，临界值为-2.86，不能拒绝原假设；phi1统计量为7.86，临界值为4.59，拒绝原假设，因此sp5的模型如下
+
+```{r}
+m2_1 = Arima(sp5,order=c(2,1,0),include.drift = TRUE)
+m2_1
+resid(m2_1) %>% Acf()
+resid(m2_1) %>% Box.test(lag = 10,fitdf = 2)
+```
+
+
+## 实验三 美国月度失业率
+
+考虑从1948年1月到2011年11月美国的失业率的月度数据，文件为`m-unrate-4811.txt`,
+
+数据来自美国联邦储备局圣路易斯分行.
+
+* 该失业率的数据是否存在单位根？
+
+* 对数据建立合适的模型(有效的模型不止一个)，然后对2011年12月至2012年3月的失业率进行预测；
+
+
+读取数据
+
+```{r}
+mydata=read.table("../data/m-unrate-4811.txt",header=TRUE)
+x=ts(mydata$rate,start=c(1948,1),frequency = 12)
+plot.ts(x)
+Acf(x)
+```
+
+单位根检验
+
+```{r,message=FALSE}
+diff(x) %>% tsdisplay()
+```
+
+我们分别作不带漂移项和带漂移项的单位根检验，根据diff(x)的PACF将延迟项设为12，下面是检验结果
+
+```{r,message=FALSE}
+df1=ur.df(x,type="none",lags=12)
+summary(df1)
+df2=ur.df(x,type="drift",lags=12)
+summary(df2)
+```
+
+第一个单位根检验的tau1检验统计量取值为-0.24，大于临界值-2.86，因此不能拒绝原假设；
+第二个单位根检验的phi1统计量为3.8，显示其对应的p值约为0.1，因此不能拒绝原假设；tau2统计量为-2.72，大于临界值-2.86，不能拒绝；
+
+上述单位根检验综合表明序列`x`为单位根非平稳序列，且不含显著的漂移项.
+
+```{r,message=FALSE}
+diff(x) %>% tsdisplay(lag.max = 50)
+```
+
+ACF和PACF图显示该序列还存在季节性，周期为12, 但是这里12，24，36处ACF虽显著，但是
+绝对值较小，表明不需要做季节差分，因此我们先用下列模型估计,然后考虑其残差
+
+```{r}
+m2=Arima(x,order=c(0,1,0),seasonal = c(1,0,1))
+tsdisplay(resid(m2))
+```
+
+m2的残差ACF和PACF图表明我们也许可以尝试MA(8)
+```{r}
+m3=Arima(x,order=c(0,1,8),seasonal = c(1,0,1))
+tsdisplay(resid(m3))
+m3
+```
+
+根据参数的显著性可以尝试进一步优化模型
+
+```{r}
+f3=c(0,NA,NA,NA,NA,NA,NA,NA,NA,NA)
+m3=Arima(x,order=c(0,1,8),seasonal = c(1,0,1),fixed=f3,transform.pars=FALSE)
+tsdisplay(resid(m3))
+m3
+Box.test(resid(m3),lag=12,fitdf = 9,type="Ljung-Box")
+Box.test(resid(m3),lag=24,fitdf = 9,type="Ljung-Box")
+Box.test(resid(m3),lag=36,fitdf = 9,type="Ljung-Box")
+```
+
+现在我们考虑其它的模型，根据模型m2的残差PACF，可以考虑下列AR(10)
+
+```{r}
+f4=c(0,NA,NA,NA,NA,0,0,0,0,NA,NA,NA)
+m4=Arima(x,order=c(10,1,0),seasonal = c(1,0,1),fixed=f4,transform.pars=FALSE)
+tsdisplay(resid(m4))
+m4
+Box.test(resid(m4),lag=12,fitdf = 7,type="Ljung-Box")
+Box.test(resid(m4),lag=24,fitdf = 7,type="Ljung-Box")
+Box.test(resid(m4),lag=36,fitdf = 7,type="Ljung-Box")
+```
+
+
+我们也可从尝试ARMA模型来拟合m2的残差
+```{r}
+m5=Arima(x,order=c(5,1,5),seasonal = c(1,0,1))
+m5
+f5=c(0,NA,NA,0,NA,0,NA,0,0,NA,NA,NA)
+m5=Arima(x,order=c(5,1,5),seasonal = c(1,0,1),fixed=f5,transform.pars=FALSE)
+tsdisplay(resid(m5))
+m5
+Box.test(resid(m5),lag=12,fitdf = 7,type="Ljung-Box")
+Box.test(resid(m5),lag=24,fitdf = 7,type="Ljung-Box")
+Box.test(resid(m5),lag=36,fitdf = 7,type="Ljung-Box")
+```
+
+
+课本第123页和125页还分别建立了下面两个模型，详细过程见教材.
+
+```{r}
+f6=c(NA,NA,NA,0,0,NA,NA,NA)
+m6=Arima(x,order=c(1,1,5),seasonal = c(1,0,1),fixed=f6,transform.pars=FALSE)
+m6
+tsdisplay(resid(m6))
+Box.test(resid(m6),lag=12,fitdf = 8,type="Ljung-Box")
+Box.test(resid(m6),lag=24,fitdf = 8,type="Ljung-Box")
+Box.test(resid(m6),lag=36,fitdf = 8,type="Ljung-Box")
+```
+
+我们看到LB检验的效果不够好,但是考虑到残ACF里只有10阶的地方有微弱的相关性，
+我们这里还是保留该模型做进一步的比较；
+
+教材上的另一个模型是
+
+```{r}
+m7=Arima(x,order=c(5,1,0),seasonal = c(1,0,1))
+f7=c(0,NA,NA,NA,NA,NA,NA)
+m7=Arima(x,order=c(5,1,0),seasonal = c(1,0,1),fixed=f7,transform.pars=FALSE)
+m7
+tsdisplay(resid(m7))
+Box.test(resid(m7),lag=12,fitdf = 6,type="Ljung-Box")
+Box.test(resid(m7),lag=24,fitdf = 6,type="Ljung-Box")
+Box.test(resid(m7),lag=36,fitdf = 6,type="Ljung-Box")
+```
+
+残差的10阶ACF显著，不出所料下面的检验通不过，保留本模型进行比较。
+
+```{r}
+Box.test(resid(m7),lag=10,fitdf = 6,type="Ljung-Box")
+```
+
+
+样本内的b比较
+AIC
+```{r}
+cbind(m3$aic,m4$aic,m5$aic,m6$aic,m7$aic)
+```
+
+m4最佳
+
+BIC
+```{r}
+cbind(m3$bic,m4$bic,m5$bic,m6$bic,m7$bic)
+```
+
+m7最佳
+
+AICc
+```{r}
+cbind(m3$aicc,m4$aicc,m5$aicc,m6$aicc,m7$aicc)
+```
+
+m4最佳
+
+样本外比较
+```{r}
+length(x)
+```
+
+选择前700个样本作为训练样本，后67个样本作为测试样本，进行回测检验
+```{r,warning=FALSE,eval=FALSE}
+source("../backtest.R")
+pm3=backtest(m3,x,700,1,fixed=f3)
+pm4=backtest(m4,x,700,1,fixed=f4)
+pm5=backtest(m5,x,700,1,fixed=f5)
+pm6=backtest(m6,x,700,1,fixed=f6)
+pm7=backtest(m7,x,700,1,fixed=f7)
+print("RMSE of out-of-sample forecasts")
+cbind(pm3$rmse,pm4$rmse,pm5$rmse,pm6$rmse,pm7$rmse)
+print("Mean absolute error of out-of-sample forecasts")
+cbind(pm3$mabso,pm4$mabso,pm5$mabso,pm6$mabso,pm7$mabso)
+```
+

@@ -1,0 +1,272 @@
+---
+title: "波动率建模I"
+output:
+  html_document:
+    df_print: paged
+author: '朱子灏2019193014'
+---
+
+# 实验目的
+
+掌握条件异方差建模的方法和技巧.
+
+# 知识准备
+
+* 收益率和对数收益率的定义及其性质
+
+* 收益率数据的经验特征
+
+* 什么是波动率，波动率有哪些经验特征
+
+* ARCH和GARCH模型的定义与性质
+
+* 如何诊断是否存在条件异方差
+
+* ARMA-GARCH模型建模的基本流程
+
+* 如何诊断ARMA-GARCH模型的有效性
+
+# 实验过程
+
+## 标准普尔500月度收益率
+
+数据文件为`m-sp2691.txt`，这是我们讲义里的例子，一起为例探讨GARCH建模的方法.
+
+```{r,warning=FALSE,message=FALSE}
+require(TSA)
+require(forecast)
+require(fBasics)
+require(fGarch)
+```
+
+* 准备数据
+
+```{r}
+sp500 = read.table("data/m-sp2691.txt",header=T)
+ts = ts(sp500[,2],start=c(1926,1),frequency = 12)
+plot(ts,main="Monthly Returns of SP500, 1926-01 to 1991-12")
+```
+
+* 计算基本描述统计量
+```{r}
+stat = basicStats(sp500$MonthlyReturn)
+stat
+```
+
+* 绘制直方图，附上正态密度估计
+
+```{r}
+hist(sp500$MonthlyReturn, probability = T)
+x = sp500$MonthlyReturn
+xfit = seq(min(x), max(x), length = 5000)
+yfit = dnorm(xfit, mean = mean(x), sd = sd(x))
+lines(xfit, yfit, col = "blue", lwd = 2)
+```
+
+* 计算偏度，峰度
+
+```{r}
+stat[15:16,]
+```
+
+* 答：偏度为`0.41`，超额峰度为`9.27`
+
+* 检验收益率分布的对称性和尖峰厚尾性；
+
+```{r, warning=FALSE}
+t = length(x)
+t.s = stat[15, ]/sqrt(6/t)
+t.k = (stat[16, ]) ^ 2/sqrt(24/t)
+ks.test(t.s, pnorm, mean = 0, sd = 1)
+ks.test(t.k, pnorm, mean = 0, sd = 1)
+```
+* 答：检验得到，收益率不服从对称分布，存在尖峰厚尾性
+
+
+* 正态性检验，Jarque-Bera检验和QQ图
+
+```{r}
+jarqueberaTest(x)
+qqnorm(x)
+qqline(x, col = 'blue')
+```
+
+* 拟合适当的ARMA模型消除序列相关性.
+
+```{r}
+tsdisplay(ts)
+m1 = Arima(ts, order = c(2, 0, 3))
+Box.test(resid(m1), type = 'Ljung-Box', lag = 13, fitdf = 5)
+tsdisplay(resid(m1))
+```
+
+
+* 比较上述ARMA模型的残差，残差绝对值和残差平方序列的ACF
+
+```{r}
+par(mfrow = c(2, 2))
+Acf(resid(m1))
+Acf(abs(resid(m1)))
+Acf(resid(m1)^2)
+Pacf(resid(m1)^2)
+```
+
+* 拟合适当的ARCH模型
+
+```{r}
+m2 = garchFit(~ arma(2, 3) + garch(3, 0), data = ts, cond.dist = 'norm', trace = F)
+summary(m2)
+```
+
+* 检验ARCH模型的有效性
+
+```{r}
+plot(m2, which = 13)
+```
+
+* 尝试不同的条件分布假设
+
+```{r,warning=FALSE}
+m2.1 = garchFit(~ arma(2, 3) + garch(3, 0), data = ts, cond.dist = 'snorm', trace = F)
+m2.2 = garchFit(~ arma(2, 3) + garch(3, 0), data = ts, cond.dist = 'sstd', trace = F)
+m2.3 = garchFit(~ arma(2, 3) + garch(3, 0), data = ts, cond.dist = 'std', trace = F)
+par(mfrow = c(2, 2))
+plot(m2, which = 13)
+plot(m2.1, which = 13)
+plot(m2.2, which = 13)
+plot(m2.3, which = 13)
+```
+
+* 拟合适当的GARCH模型
+
+```{r, warning=FALSE}
+m3 = garchFit(~ garch(1, 1), data = ts, cond.dist = 'sstd', trace = F)
+summary(m3)
+```
+
+* 检验GARCH模型的有效性
+
+```{r}
+par(mfrow = c(2, 3))
+plot(m3, which = c(4, 5, 10, 11,13))
+```
+
+## 苹果日回报率建模和预测
+
+分析苹果公司股票子2005年以来的数据；数据文件为`AAPL_hist.rda`,用下列命令读取并计算对数收益率；
+
+```{r,fig.margin=TRUE,cache=TRUE}
+load("data/AAPL_hist.rda")
+logp=log(as.numeric(AAPL[,6]))
+rtn=diff(logp)
+plot.ts(rtn)
+```
+
+完成下列任务：
+
+1. 利用basicStats计算特征统计量；回答：均值是否显著？分布是否对称？是否尖峰厚尾分布？是否正态分布？
+
+```{r}
+basicStats(rtn)
+```
+
+* 答：不服从对称分布，存在尖峰厚尾性，不服从正态分布
+
+2. 对该数据建立合适的arma模型；
+
+```{r}
+m4 = auto.arima(rtn)
+summary(m4)
+tsdisplay(resid(m4))
+```
+
+3. 检验是否存在ARCH效应；
+
+```{r}
+par(mfrow = c(2, 2))
+Acf(resid(m4))
+Acf(abs(resid(m4)))
+Acf(resid(m4)^2)
+Pacf(resid(m4)^2)
+```
+```{r,warning=FALSE}
+m5 = garchFit(~ arma(1, 0) + garch(3, 0), data = rtn, cond.dist = 'sstd', trace = F)
+summary(m5)
+plot(m5, which = 13)
+```
+
+4. 建立适当的ARMA-GARCH模型；尝试不同的条件分布假设,对模型假设进行残差检验，用plot函数观看拟合结果;
+
+```{r,warning=FALSE}
+m6 = garchFit(~ garch(1, 1), data = rtn, cond.dist = "sstd", trace = F)
+summary(m6)
+par(mfrow = c(2, 3))
+plot(m6,which = c(4, 5, 10, 11, 13))
+```
+
+
+5. 对GED分布和SGED分布，检验条件分布是否对称；
+
+```{r,warning=FALSE}
+m6.1 = garchFit(~ garch(1, 1), data = rtn, cond.dist = "ged", trace = F)
+m6.2 = garchFit(~ garch(1, 1), data = rtn, cond.dist = "sged", trace = F)
+
+t1 = NA
+t2 = (0.976 - 1) / 0.03772
+t2
+```
+
+* 答：对于sged分布，不能拒绝原假设。对于ged假设，
+
+6. 写出最终的模型形式；
+
+$$r_t = 0.0016 + Z_t, Z_t = \sigma_t\epsilon_t, \epsilon_t \sim^{IID}sstd_{0.97, 6.5},\sigma_t^2 = 0.0000066 + 0.07015Z_{t-1}^2 + 0.9164\sigma_{t-1}^2$$
+
+7. 利用模型分别做均值和波动率的向前一步预测和两步预测；
+
+```{r}
+predict(m6, n.ahead = 2, plot = TRUE)
+```
+
+8. 假设你有该组合的1000万美元的头寸，则你下一个交易日的最大损失为多少？（95%概率下）.
+
+```{r}
+-0.03118316	* 10000000
+```
+
+* 答：可能会损失311,831.6美元。
+
+## 贵州茅台月度回报率建模
+
+数据文件为`GZMT.csv`,时间起点为2001年8月，建立合适的ARMA-GARCH模型，拟合其波动率.
+
+```{r}
+GZMT = read.csv("../data/GZMT.csv",header = T)
+head(GZMT)
+gzmt = ts(GZMT[,2], start = c(2001,8), frequency = 12 )
+plot(gzmt, main = "Monthly Close Price of MAOTAI ")
+gzmt.wd = ts(GZMT[-1,3], start = c(2001,9), frequency = 12 )
+plot(gzmt.wd, main="Monthly Return of MAOTAI")
+x = gzmt.wd
+```
+
+
+完成下列任务：
+
+* 对该数据建立合适的arma模型；
+
+```{r}
+Acf(x)
+Pacf(x)
+```
+
+
+* 检验是否存在ARCH效应；
+
+* 建立适当的ARMA-GARCH模型；尝试不同的条件分布假设,对模型假设进行残差检验，用plot函数观看拟合结果;
+
+* 对GED分布和SGED分布，检验条件分布是否对称；
+
+* 写出最终的模型形式；
+
+* 绘制对波动率的拟合图.

@@ -1,0 +1,156 @@
+---
+title: "ARMAX模型"
+output:
+  html_document:
+    df_print: paged
+author: '朱子灏2019193014'
+---
+
+# 实验目的
+
+掌握对时间序列建立回归模型的方法和技巧.
+
+# 实验过程
+
+### 复习讲义
+
+复习讲义并重复讲义上面的例子。
+
+加载实验所需要的软件包
+```{r,message=FALSE,warning=FALSE}
+library("forecast")
+library("urca")
+```
+
+### 练习1.
+
+考虑Moody公司Aaa和Baa级债券从1919年1月到2011年11月的月度收益率，该数据来自于美国联邦储备局的数据库FRED.
+数据文件分别为m-aaa-1911.txt和m-baa-1911.txt.
+
+(1) 考虑Aaa债券的收益率(Yield)的对数序列,该序列是否平稳？建立合适的模型.
+```{r}
+data1=read.table("data/m-aaa-1911.txt",header = TRUE)
+data2=read.table("data/m-baa-1911.txt",header = TRUE)
+x=ts(log(data2$yield),start=c(1919,1),frequency = 12)
+y=ts(log(data1$yield),start=c(1919,1),frequency = 12)
+ts.plot(x,y,col=c("black","red"),ylab="log(yield)")
+legend("topright",c("baa","aaa"),col=c("black","red"),lty=c(1,1))
+```
+```{r}
+tsdisplay(diff(y))
+summary(ur.df(y, type = 'drift', lags = 2))
+summary(ur.df(y, type = 'none', lags = 2))
+m1.1 = Arima(y, order = c(0, 1, 1))
+summary(m1.1)
+Box.test(resid(m1.1), lag = 6, type = 'Ljung-Box', fitdf = 1)
+Box.test(resid(m1.1), lag = 12, type = 'Ljung-Box', fitdf = 1)
+```
+```{r}
+m1.2 = Arima(y, order = c(2, 1, 0))
+summary(m1.2)
+Box.test(resid(m1.2), lag = 6, type = 'Ljung-Box', fitdf = 2)
+Box.test(resid(m1.2), lag = 12, type = 'Ljung-Box', fitdf = 2)
+```
+
+
+(2) 考虑Aaa债券收益率和Baa债券债券收益率之间的关系，建立适当的回归模型.均采用收益率的对数序列，以Baa债券的收益率
+为解释变量.
+```{r}
+lm.fit = lm(y ~ x)
+summary(lm.fit)
+Acf(resid(lm.fit))
+```
+```{r}
+lm.fit1.2 = lm(diff(y) ~ diff(x) - 1)
+summary(lm.fit1.2)
+tsdisplay(resid(lm.fit1.2))
+```
+```{r}
+m1 = Arima(diff(y), xreg = diff(x), order = c(2, 0, 0), include.mean = F)
+summary(m1)
+Box.test(resid(m1), lag = 12, type = 'Ljung-Box', fitdf = 3)
+```
+### 练习2.
+考虑美国从1971年4月至2011年11月的30年期的月度资产抵押率（morg），数据来自FRED，数据文件为m-morgfed-7611.txt(变量依次为year,month,day,morg,fed)
+
+(1) 对于月度抵押率数据(morg), 该序列是否平稳？建立合适的时间序列模型.
+```{r}
+data3=read.table("data/m-morgfed-7111.txt",header=FALSE,col.names = c("year","mon","day","morg","fed"))
+head(data3)
+```
+```{r}
+ts.2 = ts(log(data3$morg), start = c(1971, 4), frequency = 12)
+plot.ts(ts.2)
+plot.ts(diff(ts.2))
+tsdisplay(ts.2)
+tsdisplay(diff(ts.2))
+```
+```{r}
+m2.1 = Arima(ts.2, order = c(0, 1, 1))
+summary(m2.1)
+Box.test(resid(m2.1), type = 'Ljung-Box', lag = 6, fitdf = 1)
+```
+```{r}
+m2.2 = Arima(ts.2, order = c(2, 0, 0))
+summary(m2.2)
+Box.test(resid(m2.2), type = 'Ljung-Box', lag = 6, fitdf = 2)
+```
+
+(2) 众所周知，抵押率依赖于联邦基金利率(fed)，用联邦基金利率的1阶滞后作为解释变量，建立对抵押率的预测模型；基于模型回答：抵押率是否依赖于联邦基金利率.
+```{r}
+morg = data3$morg
+fed = data3$fed
+len = length(morg)
+m2.3 = lm(morg[2:len] ~ fed[1:(len - 1)])
+summary(m2.3)
+tsdisplay(resid(m2.3))
+summary(ur.df(resid(m2.3), type = "none", lags = 6, selectlags = "BIC"))
+
+m2.4 = Arima(morg[2:len], order = c(3, 0, 0), xreg = fed[1:(len - 1)], include.mean = T)
+summary(m2.4)
+Box.test(resid(m2.4), lag = 12, type = 'Ljung-Box', fitdf = 4)
+```
+
+(3) 以2007年1月到2011年11月作为预测期，使用样本外预测比较上述建立的两个模型，引进解释变量是否有利于提升预测能力?
+```{r}
+n.test = 23
+morg = data3$morg
+fed = data3$fed
+h = length(morg) - n.test
+fe.m1 = c()
+fe.m3 = c()
+for(j in 1:n.test)
+{
+  fit.m1 = Arima(morg[1:(h + j - 1)], order = c(3, 1, 0))
+  fe.m1[j] = morg[h + j] - forecast(fit.m1, h = 1)$mean
+  fit.m3 = Arima(morg[2:(h + j - 1)], order = c(3, 0, 0), xreg = fed[1:(h + j - 2)], include.mean = TRUE)
+  fe.m3[j] = morg[h + j] - forecast(fit.m3, h = 1, xreg = fed[h + j - 1])$mean
+}
+MSFE.m1 = mean(fe.m1^2)
+MSFE.m3 = mean(fe.m3^2)
+cbind(sqrt(MSFE.m1), sqrt(MSFE.m3))
+```
+
+### 练习3.
+考虑标准普尔500指数的现货价格与期货价格之间的动态关系. 数据文件为sp5may.dat,该数据有三列：期货价格的对数，现价的对数和交易成本,数据来自芝加哥商品交易所1993年5月的标准普尔500指数及其6月的期货合约. 有些作者据此数据来研究是否存在指数期货的套利机会. 建立合适的回归模型.
+
+```{r}
+sp5may = read.table("data/sp5may.dat",header=TRUE)
+lnfuture = sp5may$lnfuture
+lnspot = sp5may$lnspot
+plot.ts(lnfuture, lty = 1)
+lines(lnspot, col = "red", lty = 2)
+legend(0, 6.12, c("lnfuture", "lnspot"), col = c("black", "red"), lty = c(1, 2))
+```
+```{r}
+ts.3 = ts(lnfuture, start = c(1993, 5))
+plot(ts.3)
+lm.fit3 = lm(lnfuture ~ lnspot)
+summary(lm.fit3)
+tsdisplay(resid(lm.fit3))
+summary(ur.df(resid(lm.fit3),type="none",lags=5,selectlags="BIC"))
+m3.1 = Arima(ts.3, order = c(1, 0, 0))
+summary(m3.1)
+tsdisplay(resid(m3.1))
+Box.test(resid(m3.1), lag = 12, type = 'Ljung-Box', fitdf = 2)
+```

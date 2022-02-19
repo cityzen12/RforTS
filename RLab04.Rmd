@@ -1,0 +1,136 @@
+---
+title: "RLab04：时间序列描述性分析和差分"
+output: html_notebook
+---
+
+实验目标
+
+* 学习用RMARKDOWN撰写上机报告；
+* 学习管道操作符`%>%`；
+* 掌握时间序列描述性分析的基本方法；
+
+
+
+## 练习一
+
+对数据`bev.txt`完成下列分析；
+
+* 读取数据，构造时间序列，并绘制时序图；
+```{r}
+data_2 = read.table("../data/bev.txt",header=T)
+head(data_2)
+bev = ts(data_2[,2],start=1500,frequency = 1)
+plot(bev)
+```
+
+* 用`lowess`来拟合该序列的趋势，在时序图上绘出趋势；
+
+* 应用必要的变换和差分运算，将序列变换为平稳时间序列，绘出时序图和ACF图；
+
+## 练习二
+
+分析列数据集`AirPassengers`，按照下列步骤完成分析;
+
+* 加载数据，并重新命名为`z`;
+```{r}
+data("AirPassengers")
+z = AirPassengers
+```
+
+* 绘制时间序列图，横轴标为"Year"，纵轴标为"Airline Passenger Numbers"，图像标题设为"Monthly Airline Passenger Numbers 1949-1960"；
+
+* 绘制ACF图；
+
+* 对`z`做趋势差分，结果记为`z.1`，绘制时序图，有什么现象？
+
+* 对`z.1`做季节差分，结果记为`z.1.12`,绘制时间序列图；
+
+* 对`z`做对数变换,结果记为`z.log`，比较`z`和`z.log`的时序图；
+
+* 对`z.log`做趋势差分，结果记为`z.log.1`，绘制时序图和ACF图;
+
+* 对`z.log.1`做季节差分，结果记为`z.log.1.12`,绘制时序图和ACF图;
+
+* 能否直接对`z`做STL分解，为什么？
+
+* 对`z`做STL分解，绘制无规则项的时序图；
+
+* 应用X11对z做分解；绘制原始时序图以及季节调整以后的时序图；
+
+* 应用SEATS对z做分解；绘制原始时序图以及季节调整以后的时序图；
+
+* 在同一个时序图上分别标出STL分解，X11分解和SEATS分解中的趋势成分；
+
+* 比较三种分解的残差图；
+
+
+## 练习三
+
+
+对顺丰公司的月度营收数据进行分析.
+
+* 读取数据`ShunFeng.csv`，观察数据的前六行，选取`income`变量构造时间序列，时间起点为2016年10月份，
+只选取截止到2019年12月(疫情之前)的序列进行下列分析
+
+```{r}
+shunfeng = read.csv()
+head(shunfeng)
+sf = ts(shunfeng$income,start=c(2016,10),end=c(2019,12),frequency = 12)
+plot(sf)
+```
+
+* 用线性回归模型拟合趋势，即考虑下列模型，绘制出你的拟合结果
+
+$$x_t  = \beta_0+\beta_1 t +u_t$$
+
+```{r}
+t = 
+fit1 = lm()
+```
+
+* 观察`sf`的monthplot, 发现该序列在一月份和二月份的数据异常，这和我国
+的春节有关.
+```{r}
+monthplot(sf)
+```
+
+
+* 消除日历效应
+
+考虑春节效应，定义$D_t$为$t$月的春节天数，查万年历得知，2017年1月份5天，二月份2天，2018年2月份7天，2019年2月7天，考虑模型
+
+$$x_t = \beta_0+\beta_1 t+\beta_2 D_t+u_t$$
+绘制出拟合的趋势.
+
+```{r}
+D = c(0,0,0,5,2,rep(0,10),0,7,rep(0,10),0,7,rep(0,5))
+D
+fit2 = lm(sf ~ t + D)
+```
+
+* 分别绘制上述两种方式得到的残差序列
+
+```{r}
+res1 = ts(resid(fit1),start=c(2016,10),frequency = 12)
+res2 = ts(resid(fit2),start=c(2016,10),frequency = 12)
+ts.plot(res1,res2,col=c("red","blue"))
+```
+
+* 绘制上述序列的ACF图
+```{r}
+Acf(res1)
+Acf(res2)
+```
+
+* 对序列`sf`做STL分解，观察结果.
+```{r}
+sf.stl = stl(sf,s.window = "periodic")
+plot(sf.stl)
+```
+
+* 对序列`sf`做趋势差分，观察趋势差分后序列的时序图和ACF图
+```{r}
+sf.1 = diff(sf)
+```
+
+* 尝试用其它可能的模型来消除季节性和假日效应(春节效应)，看哪一种得到的效果最好。

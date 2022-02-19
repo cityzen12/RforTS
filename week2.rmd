@@ -1,0 +1,52 @@
+---
+title: "week2"
+author: "朱子灏(2019193014)"
+date: "2021/9/16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Exp1
+```{r}
+mydata1 = read.table('D:/study/3rd/Time Sequence/data/elecsales.txt')
+head(mydata1)
+
+x1 = ts(mydata1, start = 1989, frequency = 1)
+
+plot(x1)
+
+acf(x1)
+
+Acf(x1)
+
+plot(ma(x1, order = 3))
+plot(ma(x1, order = 5))
+plot(ma(x1, order = 7))
+plot(ma(x1, order = 9))
+
+plot(lowess(x1))
+
+```
+
+Exp2
+```{r}
+mydata2 = read.csv('D:/study/3rd/Time Sequence/data/elecequip.csv')
+x2 = ts(mydata2[, 2], start = c(1996, 1), frequency = 12)
+
+plot(x2)
+Acf(x2)
+tsdisplay(x2)
+
+fit.ma = ma(x2, order = 3)
+plot(x2)
+lines(fit.ma,col="red")
+```
+
+Exp3
+```{r}
+
+
+```

@@ -1,0 +1,295 @@
+---
+title: "RLab07: ARMA/ARIMA建模"
+author: "朱子灏2019193014"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    mathjax: https://cdn.bootcss.com/mathjax/2.7.4/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+    theme:  yeti
+    toc: true
+    toc_float: true
+    toc_depth: 3
+---
+
+本文件需多周连续上机完成，请大家下课时将文件保存于自己的邮箱以待下次使用.
+
+应首先加载软件包`forecast`
+
+```{r, message = FALSE, warning = FALSE}
+require(forecast)
+```
+
+
+# ARMA/ARIMA建模的一般流程 
+
+* 构造时间序列对象，绘制时序图和ACF/PACF图；
+* 判断序列平稳性，如果是趋势非平稳则做趋势差分消除趋势，如为季节非平稳则做季节差分，直至平稳；
+* 如果方差不稳定，应先做适当的BOX-COX变换再差分；
+* 对平稳化后的序列选择适当的ARMA模型（定阶）；
+* 对原序列建立相应的ARIMA模型，并估计参数；
+* 对残差进行白噪声检验，如果残差不是白噪声则应重新设定模型；
+* 对模型进行适当优化；
+* 如果有多个有效的模型，利用AIC/BIC/BACKTESTING进行模型比较；
+* 预测；
+
+# 案例一 OVERSHORT序列
+
+* 读入数据`overshort.txt`，并构造时间序列对象;
+```{r}
+os = scan('data/overshort.txt', sep = '\t')
+ts.1 = ts(os)
+ts.1 = na.omit(ts.1)
+plot(ts.1, type = 'o')
+Acf(ts.1)
+tsdisplay(ts.1)
+```
+```{r}
+m1 = Arima(ts.1, order = c(0, 0, 1), include.mean = T)
+summary(m1)
+res1 = resid(m1)
+plot(res1)
+Acf(res1)
+Box.test(res1, lag = 10, type = 'Ljung-Box', fitdf = 1)
+tsdiag(m1)
+f1 = forecast(m1, 12)
+plot(f1)
+```
+
+# 案例二 美国GNP增长率
+
+* 读入数据`q-gnp4710.txt`，单位是10亿美元，季度数据，起始点1947年1季度. 构造时间序列对象，记为`gnp.value`
+
+```{r}
+da = read.table("data/q-gnp4710.txt",header=T)
+G = da$VALUE
+gnp.value = ts(G,start=c(1947,1),frequency = 12)
+plot(gnp.value)
+diff(gnp.value) %>% plot()
+```
+
+
+* 计算对数增长率，记为`gnp`
+
+```{r}
+gnp = log(gnp.value) %>% diff()
+tsdisplay(gnp,lag.max = 12)
+```
+```{r}
+m2 = Arima(gnp.value, lambda = 0, order = c(3, 1, 0), include.drift = T)
+summary(m2)
+res2 = resid(m2)
+plot(res2)
+Acf(res2)
+Box.test(res2, lag = 6, type = 'Ljung-Box', fitdf = 3)
+Box.test(res2, lag = 12, type = 'Ljung-Box', fitdf = 3)
+tsdiag(m2)
+f2 = forecast(m2, 12)
+plot(f2)
+```
+
+
+# 案例三 全球气温异常值序列
+
+* 读入数据`m-GLBTanomalies.csv`，1880年1月至2019年9月，月度数据，本数据来自NOAA官方网站最新数据. 构造时间序列对象并建立合适的模型.
+```{r}
+data3 = read.csv('data/m-GLBTanomalies.csv', header = T)
+ts.3 = ts(data3$Value, start = c(1880, 1), end = c(2019, 9), frequency = 12)
+plot(ts.3, type = 'o')
+Acf(ts.3)
+tsdisplay(ts.3)
+diff(ts.3) %>% tsdisplay()
+```
+```{r}
+m3 = Arima(ts.3, order = c(1, 1, 1), include.drift = T)
+summary(m3)
+res3 = resid(m3)
+Acf(res3)
+Box.test(res3, type = 'Ljung-Box', lag = 12, fitdf = 2)
+tsdiag(m3)
+f3 = forecast(m3, 120)
+plot(f3)
+```
+
+# 案例四 顺丰月接单量
+
+* 读取数据文件`ShunFeng.csv`,月度数据，起始点为2016年10月，变量`volume`为接单量数据，单位：亿票；
+```{r}
+sf = read.csv('data/ShunFeng.csv', header = T)
+ts.4 = ts(sf$volume, start = c(2016, 10), frequency = 12)
+plot(ts.4, type = 'o')
+Acf(ts.4)
+tsdisplay(ts.4)
+diff(ts.4) %>% tsdisplay()
+```
+```{r}
+m4 = Arima(ts.4, order = c(0, 1, 2), include.drift = T)
+summary(m4)
+res4 = resid(m4)
+Acf(res4)
+Box.test(res4, type = 'Ljung-Box', lag = 24, fitdf = 3)
+tsdiag(m4)
+f4 = forecast(m4, 12)
+plot(f4)
+```
+
+
+# 案例五 价值加权指数回报率序列
+
+* 对芝加哥证券价格研究所(CRSP)所编制的价值加权指数1926年1月至2008年12月的月度收益率序列进行建模，文件为`m-ibm3dx2608.txt`,我们用该序列的前984个观测值来拟合模型，并预测未来12个月的值。
+
+```{r}
+vw = read.table('data/m-ibm3dx2608.txt',header=T)[,3]
+vw.train = vw[1:984]
+vw.test = vw[985:996]
+```
+```{r}
+m5 = Arima(vw.train, order = c(3, 0, 0),fixed = c(NA, 0, NA, NA), transform.pars = F ) 
+summary(m5)
+res5 = resid(m5)
+Acf(res5)
+Box.test(res5, lag = 12, type = 'Ljung-Box', fitdf = 2)
+tsdiag(m5)
+f5=forecast(m5, 24)
+plot(f5)
+```
+
+# 案例六 中国农业实际国民收入指数序列(1952至1988)
+
+* 读取数据`FarmingIncome.txt`
+
+```{r}
+farmingIncome=read.table("data/FarmingIncome.txt")
+x7=ts(farmingIncome[,2],start=1952,frequency=1)
+plot(x7,type="o")
+```
+```{r}
+diff(x7)
+tsdisplay(x7)
+m6 = Arima(x7, order = c(1, 1, 0), lambda = 0, include.drift = T)
+res6 = resid(m6)
+Acf(res6)
+Box.test(res6, lag = 12, type = 'Ljung-Box', fitdf = 1)
+tsdiag(m6)
+f6 = forecast(m6, 12)
+plot(f6)
+```
+
+
+# 案例八 3M公司月收益率数据
+文件为`m-3m4608.txt`
+
+```{r}
+da <-  read.table("data/m-3m4608.txt",header=T)
+mmm <-  log(da$rtn+1) %>% ts()
+tsdisplay(mmm)
+```
+```{r}
+m8 = Arima(mmm, order = c(3, 0, 0), fixed = c(NA, 0, NA, NA))
+summary(m8)
+res8 = resid(m8)
+Acf(res8)
+Box.test(res8, lag = 6, type = 'Ljung-Box', fitdf = 3)
+tsdiag(m8)
+f8 = forecast(m8, 50)
+plot(f8)
+```
+
+
+# 案例九 模拟数据
+
+在学习R的过程中，我们可以用计算机来模拟一些人工时间序列数据，这种情况下，我们已知生成数据的模型，因此有助于理解所学模型的性质和方法；例如下列代码就模拟了一个随机漫步过程；
+
+```{r}
+T = 200
+mu = 0
+y = c()
+y[1] = rnorm(1,0,1)
+for(t in 2:200)
+  y[t] = mu + y[t-1]+rnorm(1,0,1)
+y = ts(y)
+plot(y)
+```
+
+反复运行上述代码，观察结果是否不同；
+
+把上述代码中的mu修改为0.3，再反复运行上述代码，观察结果是否不同；
+
+如果你想在重复实验里得到相同的样本，可以用set.seed函数来设置随机数发生器的种子. 例如重复运行下列代码时，每次得到的样本是一样的
+
+```{r}
+set.seed(12345)
+T = 200
+mu = 0.3
+y = c()
+y[1] = rnorm(1,0,1)
+for(t in 2:200)
+  y[t] = mu + y[t-1]+rnorm(1,0,1)
+y = ts(y)
+plot(y)
+```
+
+* 自己写一段代码，模拟AR(1)过程的样本，并查看其ACF和PACF
+$$x_t = \phi x_{t-1}+ Z_t,~Z_t\sim N(0,1)$$
+
+```{r}
+T = 500
+phi = 0.7
+x=c()
+x[1] = rnorm(1,0,1)
+for (i in 2:T)
+{
+  x[i] =  phi*x[i-1] + rnorm(1,0,1)
+}
+x = ts(x)
+plot(x)
+Acf(x)
+```
+
+
+* `arima.sim`函数可以从一个给定的已知模型里模拟样本数据，用于我们练习建模.
+
+```{r}
+set.seed(1)
+x91=arima.sim(n=500,model=list(ar=c(0.60,-0.8),ma=0.28))
+plot(x91)
+```
+
+```{r}
+set.seed(5)
+n<-500
+x92<-arima.sim(list(order=c(0,0,2), ma=c(-0.5, 0.4)), n)
+plot(x92)
+x93<-arima.sim(list(order=c(0,0,3), ma=c(1/3,1/5,-1/9)),n)
+plot(x93)
+```
+
+
+
+```{r}
+set.seed(12345)
+x94 = arima.sim(n=500,list(ar=0.7,ma=-0.4))
+plot(x94)
+Acf(x94)
+```
+
+```{r}
+set.seed(12346)
+x95 = arima.sim(n=500,list(order=c(1,1,1),ar=-0.5,ma=-0.3))
+plot(x95)
+```
+```{r}
+set.seed(111)
+x96 = arima.sim(n=500,list(order=c(1,1,2),ar=-0.3,ma=c(-0.3,0.5)))
+plot(x96)
+```
+
+```{r}
+set.seed(4)
+n<-500
+x97<-arima.sim(list(order=c(2,0,0), ar=c(-0.4, 0.3)), n)
+plot(x97)
+x98<-arima.sim(list(order=c(3,0,0), ar=c(1/4,1/2,-1/8)),n)
+plot(x98)
+```
+
+

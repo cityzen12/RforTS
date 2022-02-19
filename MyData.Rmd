@@ -1,0 +1,117 @@
+---
+title: "Time Series Datasets"
+author: "温松桥"
+date: "2019/9/9"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,warning=FALSE,message=FALSE}
+library("forecast")
+library("xts")
+```
+
+
+
+## 顺丰营收与客单量
+
+```{r,warning=FALSE}
+library(forecast)
+shunfeng = read.csv("D:/Nutstore/MyData/ShunFeng.csv",header = T)
+head(shunfeng)
+sf.income = ts(shunfeng$income,start=c(2016,10),frequency = 12)
+sf.volume = ts(shunfeng$volume,start=c(2016,10),frequency = 12)
+plot(sf.income,type="o")
+plot(sf.volume,type="o")
+```
+
+
+## 中国商营航空公司订座量
+
+```{r}
+TravelSky = read.csv("D:/Nutstore/MyData/TravelSky.csv",header = T)
+head(TravelSky)
+abroad = ts(TravelSky$international,start=c(2009,12),frequency = 12)
+home = ts(TravelSky$domestic,start=c(2009,12),frequency = 12) 
+plot(abroad,type="o")
+plot(home,type="o")
+```
+
+
+## 美国航空乘客数量
+
+```{r}
+AirPassengers = read.csv("D:/Nutstore/MyData/AirPassengers.csv",header = T)
+head(AirPassengers)
+AP = ts(AirPassengers$Number,start=c(1949,1),frequency = 12)
+plot(AP,ylab = "Airline Passenger Numbers, 1949-1960")
+```
+
+
+## 强生公司季度收益
+
+```{r}
+JohnsonJohnson = read.csv("D:/Nutstore/MyData/JohnsonJohnson.csv",header = T)
+head(JohnsonJohnson)
+JJ = ts(JohnsonJohnson$JohnsonJohnson,start=c(1960,1),frequency = 4)
+plot(JJ,ylab = "Quarterly Earnings per Johnson & Johnson Share")
+
+```
+
+
+## 中国社会消费品零售总额
+
+```{r,warning=FALSE}
+TRSCG = read.csv("D:/Nutstore/MyData/TRSCG.csv",header = T)
+head(TRSCG)
+tail(TRSCG)
+n = length(TRSCG[,2])
+TRSCG = ts(TRSCG[,2][n:1],start=c(2002,1),frequency = 12)
+plot(TRSCG,ylab = "中国社会消费品零售总额")
+```
+
+
+## 深圳图书馆入馆人数
+
+```{r}
+ShenzhenLibrary = read.csv("D:/Nutstore/MyData/ShenzhenLibrary.csv", header = T)
+colnames(ShenzhenLibrary) = c("date","numbers")
+head(ShenzhenLibrary)
+szlabr = ts(as.numeric(ShenzhenLibrary$numbers))
+szlabr = xts(szlabr, order.by =  as.Date(ShenzhenLibrary$date))
+plot(szlabr, ylab = "深圳市图书馆入馆人数")
+```
+
+
+## 贵州茅台股票月度回报
+备注：数据有问题，有待核查
+```{r}
+GZMT = read.csv("D:/Nutstore/MyData/GZMT.csv",header = T)
+head(GZMT)
+gzmt = ts(GZMT[,2], start = c(2001,8), frequency = 12 )
+plot(gzmt, main = "贵州茅台月收盘价")
+gzmt.wd = ts(GZMT[-1,3], start = c(2001,9), frequency = 12 )
+plot(gzmt.wd, main="贵州茅台考虑现金红利再投资月回报")
+gzmt.nd = ts(GZMT[-1,4], start = c(2001,9), frequency = 12 )
+plot(gzmt.nd,main="贵州茅台月回报")
+```
+
+## 中国股票市场综合指数
+```{r}
+ChinaIndex = read.csv("D:/Nutstore/MyData/ChinaIndex.csv",header = T)
+SHCI = xts(ChinaIndex[ChinaIndex$Indexcd == 1, 3], as.Date(ChinaIndex[ChinaIndex$Indexcd == 1, 2]))
+plot(SHCI, main="上证综合指数")
+SZCI = xts(ChinaIndex[ChinaIndex$Indexcd == 399107, 3], as.Date(ChinaIndex[ChinaIndex$Indexcd == 399107, 2]))
+plot(SZCI, main="深圳成份指数")
+SHCI.rt = xts(ChinaIndex[ChinaIndex$Indexcd == 1, 4], as.Date(ChinaIndex[ChinaIndex$Indexcd == 1, 2]))
+plot(SHCI.rt, main="上证综合指数日回报")
+SZCI.rt = xts(ChinaIndex[ChinaIndex$Indexcd == 399107, 4], as.Date(ChinaIndex[ChinaIndex$Indexcd == 399107, 2]))
+plot(SZCI.rt, main="深圳成份指数日回报")
+```
+
